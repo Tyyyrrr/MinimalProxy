@@ -7,23 +7,11 @@ namespace MinimalProxy
     class Program
     {
         
-        static void Main(string[] _)
+        static void Main(string[] args)
         {
+            using var server = new MinimalProxy.Server(args);
 
-            using var listener = new HttpListener();
-
-            Console.WriteLine($"{listener.DefaultServiceNames.Count} DEFAULT SERVICES: ");
-
-            foreach (var service in listener.DefaultServiceNames)
-                Console.WriteLine(service);
-
-
-            Console.WriteLine($"{listener.Prefixes.Count} PREFIXES: ");
-
-            foreach (var prefix in listener.Prefixes)
-                Console.WriteLine(prefix);
-            
+            Console.Read();
         }
-
     }
 }
