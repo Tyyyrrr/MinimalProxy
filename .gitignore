@@ -6,6 +6,13 @@
 # dotenv files
 .env
 
+# certificate files
+*.crt
+*.csr
+*.key
+*.pfx
+
+
 # User-specific files
 *.rsuser
 *.suo
