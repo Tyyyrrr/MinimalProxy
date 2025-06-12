@@ -15,7 +15,7 @@ namespace MinimalProxy
             }
             catch(Exception ex)
             {
-                string str = "Failed to setup server: " + ex.Message;
+                string str = $"Failed to setup {nameof(MinimalProxy)}: " + ex.Message;
 
                 while (ex.InnerException != null)
                 {
@@ -30,10 +30,10 @@ namespace MinimalProxy
                 return;
             }
 
+
             Console.Read();
 
-            if(server.IsRunning)
-                server.Dispose();
+            server.Dispose();
         }
     }
 }
