@@ -5,4 +5,14 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="TranslationInterface\**" />
+    <EmbeddedResource Remove="TranslationInterface\**" />
+    <None Remove="TranslationInterface\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="TranslationInterface\TranslationInterface.csproj" />
+  </ItemGroup>
+
 </Project>
