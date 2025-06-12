@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Net;
-using System.Net.Http;
 
 namespace MinimalProxy
 {
@@ -9,9 +7,33 @@ namespace MinimalProxy
         
         static void Main(string[] args)
         {
-            using var server = new MinimalProxy.Server(args);
+            Server server;
+
+            try
+            {
+                server = new Server(args);
+            }
+            catch(Exception ex)
+            {
+                string str = "Failed to setup server: " + ex.Message;
+
+                while (ex.InnerException != null)
+                {
+                    ex = ex.InnerException;
+                    str += "\n" + ex.Message;
+                }
+
+                str += "\n\nsee: --help\n";
+
+                Console.WriteLine(str);
+                Console.Read();
+                return;
+            }
 
             Console.Read();
+
+            if(server.IsRunning)
+                server.Dispose();
         }
     }
 }
