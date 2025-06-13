@@ -162,8 +162,6 @@ internal sealed class Server : IDisposable
 
         if (lib != string.Empty)
         {
-            Console.WriteLine("Loading dll: " + lib);
-
             var relativePath = Path.Combine(Directory.GetCurrentDirectory(), lib);
 
             Assembly usrLib;
@@ -251,6 +249,12 @@ internal sealed class Server : IDisposable
 #endif
 
 
+    bool ShouldTranslate() => _dllPath.Length > 0;
+
+    bool ShouldTerminate() => _cts.IsCancellationRequested;
+
+
+
     public void Dispose()
     {
         _cts.Cancel();
@@ -267,13 +271,11 @@ internal sealed class Server : IDisposable
     {
         var server = (Server)result.AsyncState;
 
-        if (server._cts.Token.IsCancellationRequested)
+        if (server.ShouldTerminate())
             return;
 
-        HttpListenerContext context = server._httpListener.EndGetContext(result);
 
-        context.Response.ContentType = context.Request.ContentType;
-        context.Response.ContentEncoding = context.Request.ContentEncoding;
+        HttpListenerContext context = server._httpListener.EndGetContext(result);
 
         // refuse to pass new request further if there are too many concurrent tasks running
         if (Interlocked.Increment(ref server._concurrentRequestsCount) > server._maxConcurrentRequests)
@@ -281,11 +283,6 @@ internal sealed class Server : IDisposable
 #if DEBUG
             Console.WriteLine("Request rejected.");
 #endif
-            byte[] refuseClientMessage = context.Request.ContentEncoding.GetBytes($"{nameof(MinimalProxy)} refused to process your data, because there are already too many pending requests.");
-
-            context.Response.ContentLength64 = refuseClientMessage.Length;
-
-            context.Response.OutputStream.Write(refuseClientMessage, 0, refuseClientMessage.Length);
 
             server.FinalizeProcessingRequest(context);
 
@@ -296,147 +293,202 @@ internal sealed class Server : IDisposable
 
 
         // otherwise start processing the current and listening to the next client
-
 #if DEBUG
         Console.WriteLine($"Pending requests: {server._concurrentRequestsCount}/{server._maxConcurrentRequests}");
 #endif
-        _ = server.SendTargetRequest(context); // async, fire and forget
+        _ = server.HandleClientAsync(context);
 
         _ = server._httpListener.BeginGetContext(OnClientRequest, server);
     }
 
 
-    async Task SendTargetRequest(HttpListenerContext context)
+    async Task HandleClientAsync(HttpListenerContext context)
     {
-        using var targetRequest = new HttpRequestMessage(HttpMethod.Parse(context.Request.HttpMethod), _httpClient.BaseAddress);
+        if(ShouldTranslate())
+            await HandleClientWithTranslationAsync(context);
+        else
+            await HandleClientWithoutTranslationAsync(context);
 
-        // if the path to .dll library has been specified, translate 'POST' requests before passing them to the target
-        if (_dllPath != string.Empty && context.Request.HttpMethod == HttpMethod.Post.Method)
-        {
-            using var ms = new MemoryStream();
-
-            // try to translate data sent by the client
-            if (_translator.TryTranslateRequest(context.Request.InputStream, ms, context.Request.ContentEncoding))
-                targetRequest.Content = new StreamContent(ms);
-            
-            else // on failure: notify the client and early return
-            {
-                targetRequest.Dispose();
-#if DEBUG
-                Console.WriteLine("Failed to translate request");
-#endif
-                byte[] errMsg = context.Request.ContentEncoding.GetBytes($"{nameof(MinimalProxy)} failed to translate your request.");
-
-                context.Response.ContentLength64 = errMsg.Length;
-
-                try { await context.Response.OutputStream.WriteAsync(errMsg, _cts.Token); }
-                catch (OperationCanceledException) { }
-
-                FinalizeProcessingRequest(context);
-
-                return;
-            }
-        }
-        // otherwise simply pass the request further
-        else targetRequest.Content = new StreamContent(context.Request.InputStream);
-
-
-        HttpResponseMessage targetResponse;
-        try
-        {
-            targetResponse = await _httpClient.SendAsync(targetRequest, HttpCompletionOption.ResponseContentRead, _cts.Token);
-        }
-        catch (Exception ex) 
-        {
-            if (ex is OperationCanceledException && _cts.IsCancellationRequested) // this state indicates that the proxy server is shutting down
-                return;
-
-
-            Console.WriteLine($"Target not responding or unreachable. {ex.Message}");
-
-            byte[] errMsg = context.Request.ContentEncoding.GetBytes($"{nameof(MinimalProxy)} could not reach the target url.");
-
-            context.Response.ContentLength64 = errMsg.Length;
-
-            try { await context.Response.OutputStream.WriteAsync(errMsg, _cts.Token); }
-            catch (Exception) { }
-
-            FinalizeProcessingRequest(context); 
-            return;
-        }
-
-        try
-        {
-            await ProcessTargetResponse(context, targetResponse);
-        }
-        catch(Exception ex)
-        {
-            if (ex is OperationCanceledException && _cts.IsCancellationRequested)
-                return;
-
-            Console.WriteLine($"Processing failed. {ex.Message}");
-
-            byte[] errMsg = context.Request.ContentEncoding.GetBytes($"{nameof(MinimalProxy)} failed to provide response.");
-
-            context.Response.ContentLength64 = errMsg.Length;
-
-            try { await context.Response.OutputStream.WriteAsync(errMsg, _cts.Token); }
-            catch (Exception) { }
-        }
+        context.Response.ContentEncoding = context.Request.ContentEncoding;
 
         FinalizeProcessingRequest(context);
     }
 
 
-    async Task ProcessTargetResponse(HttpListenerContext context, HttpResponseMessage response)
+    async Task HandleClientWithTranslationAsync(HttpListenerContext context)
     {
-        if (_cts.IsCancellationRequested)
-            return;
-
-
-        if (!response.IsSuccessStatusCode)
+        if(!_translator.TryTranslateRequest(context.Request, out var translatedRequest))
         {
 #if DEBUG
-            Console.WriteLine("Target failed to respond. Reason: " + response.ReasonPhrase);
+            Console.WriteLine("Failed to translate request.");
 #endif
-            byte[] errMsg = context.Request.ContentEncoding.GetBytes($"{nameof(MinimalProxy)} failed to get the response from the target. Reason: {response.ReasonPhrase}");
-
-            response.Dispose();
-
-            context.Response.ContentLength64 = errMsg.Length;
-
-            await context.Response.OutputStream.WriteAsync(errMsg, _cts.Token);
-
             return;
         }
 
-        await using var responseStream = await response.Content.ReadAsStreamAsync(_cts.Token);
+        HttpResponseMessage response;
 
-        response.Dispose();
-
-        if (_dllPath != string.Empty && context.Request.HttpMethod == HttpMethod.Post.Method)
+        try
         {
-            if (!_translator.TryTranslateResponse(responseStream, context.Response.OutputStream, context.Request.ContentEncoding))
+            response = await GetResponseAsync(translatedRequest);
+        }
+        catch (Exception ex)
+        {
+#if DEBUG
+            if(!ShouldTerminate())
+                Console.WriteLine("Target server unreachable or not responding: " + ex.Message);
+#endif
+            return;
+        }
+        finally
+        {
+            translatedRequest.Dispose();
+        }
+
+
+        if(!_translator.TryTranslateResponse(response, out var translatedResponse))
+        {
+#if DEBUG
+            Console.WriteLine("Failed to translate response.");
+#endif
+            response.Dispose();
+            return;
+        }
+
+
+        try
+        {
+            await SendResponseAsync(translatedResponse, context.Response);
+        }
+        catch (Exception ex)
+        {
+#if DEBUG
+            if (!ShouldTerminate())
+                Console.WriteLine("Failed to respond to the client: " + ex.Message);
+#endif
+            return;
+        }
+        finally
+        {
+            response.Dispose();
+        }
+
+        translatedResponse.Dispose();
+    }
+
+
+    async Task HandleClientWithoutTranslationAsync(HttpListenerContext context)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Parse(context.Request.HttpMethod), _httpClient.BaseAddress);
+
+        if (context.Request.HasEntityBody)
+        {
+            request.Content = new StreamContent(context.Request.InputStream);
+
+            if (!request.Content.Headers.TryAddWithoutValidation("Content-Type", context.Request.Headers["Content-Type"]))
             {
 #if DEBUG
-                Console.WriteLine("Failed to translate response");
+                Console.WriteLine("Failed to add content-type header");
 #endif
-                byte[] errMsg = context.Request.ContentEncoding.GetBytes($"{nameof(MinimalProxy)} failed to translate target's response to your request.");
-
-                context.Response.ContentLength64 = errMsg.Length;
-
-                await context.Response.OutputStream.WriteAsync(errMsg, _cts.Token);
+                request.Dispose();
+                return;
             }
         }
-        else
+
+        HttpResponseMessage response;
+
+        try
         {
-            await responseStream.CopyToAsync(context.Response.OutputStream, _cts.Token);
+            response = await GetResponseAsync(request);
+        }
+        catch (Exception ex)
+        {
+#if DEBUG
+            if (!ShouldTerminate())
+                Console.WriteLine("Target server unreachable or not responding: " + ex.Message);
+#endif
+            return;
+        }
+        finally
+        {
+            request.Dispose();
+        }
+
+        try
+        {
+            await SendResponseAsync(response, context.Response);
+        }
+        catch (Exception ex)
+        {
+#if DEBUG
+            if (!ShouldTerminate())
+                Console.WriteLine("Failed to respond to the client: " + ex.Message);
+#endif
+            return;
+        }
+        finally
+        {
+            response.Dispose();
         }
     }
 
+
+    async Task<HttpResponseMessage> GetResponseAsync(HttpRequestMessage request)
+    {
+        HttpResponseMessage response;
+
+        if (request.Method == HttpMethod.Get)
+            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, _cts.Token);
+
+        else if (request.Method == HttpMethod.Post)
+            response = await _httpClient.PostAsync(_httpClient.BaseAddress, request.Content, _cts.Token);
+
+        else if (request.Method == HttpMethod.Put)
+            response = await _httpClient.PutAsync(_httpClient.BaseAddress, request.Content, _cts.Token);
+
+        else if (request.Method == HttpMethod.Delete)
+            response = await _httpClient.DeleteAsync(_httpClient.BaseAddress, _cts.Token);
+
+        else if (request.Method == HttpMethod.Patch)
+            response = await _httpClient.PatchAsync(_httpClient.BaseAddress, request.Content, _cts.Token);
+
+        else if (
+            request.Method == HttpMethod.Head ||
+            request.Method == HttpMethod.Options ||
+            request.Method == HttpMethod.Trace
+            )
+            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _cts.Token);
+        
+
+        else throw new HttpRequestException($"HTTP Method not supported: {request.Method}");
+                                        
+        return response;
+    }
+
+    async Task SendResponseAsync(HttpResponseMessage response, HttpListenerResponse destination)
+    {
+        response.EnsureSuccessStatusCode();
+
+        destination.StatusCode = (int)response.StatusCode;
+
+        if(response.Content.Headers.ContentLength.HasValue)
+            destination.ContentLength64 = response.Content.Headers.ContentLength.Value;
+
+        if (response.Content.Headers.ContentType != null)
+            destination.ContentType = response.Content.Headers.ContentType.ToString();
+
+        if (response.Content.Headers.ContentEncoding != null)
+        {
+            foreach (var encoding in response.Content.Headers.ContentEncoding)
+                destination.AddHeader("Content-Encoding", encoding);
+        }
+
+        await (await response.Content.ReadAsStreamAsync(_cts.Token)).CopyToAsync(destination.OutputStream, _cts.Token);
+    }
+
+
     void FinalizeProcessingRequest(HttpListenerContext context)
     {
-        if (_cts.IsCancellationRequested)
+        if (ShouldTerminate())
             return;
 
         context.Response.Close();
