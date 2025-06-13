@@ -48,7 +48,7 @@ internal sealed class Server : IDisposable
         "\n\n-port [integer] // listening port" +
         "\n\n-url [string]  // target url address" +
         "\n\n-ssl [t/f/y/n/yes/no/enable/disable/true/false] (optional, default: true)  // toggle encryption" +
-        "\n\n-lib [string] (optional, default: empty) // absolute or relative path to a custom .dll library for translating POST requests." +
+        "\n\n-lib [string] (optional, default: empty) // absolute or relative path to a custom .dll library for translating requests." +
         "\n                                         // Requests will be passed as-is, if this argument is not provided." +
         "\n\n-limit [integer] (optional, default: 1) // Maximum concurrent client requests that can be processed at the same time" +
         "\n\n-timeout [integer] (optional, default: infinite) // Time (in seconds) to wait for the response from target server."
@@ -124,7 +124,7 @@ internal sealed class Server : IDisposable
         if (Regex.Match(argStr, _regexPatterns[Arg.HELP]).Success)
         {
             Console.WriteLine(_helpContents);
-            return;
+            argStr = Console.ReadLine();
         }
 
 
@@ -220,7 +220,7 @@ internal sealed class Server : IDisposable
         _httpListener.Start();
 
 
-        Console.WriteLine(nameof(MinimalProxy) + " is up.\n");
+        Console.WriteLine($"\n{nameof(MinimalProxy)} is up.\n");
 #if DEBUG
         Console.WriteLine(GetConfigString());
 #endif
@@ -259,7 +259,7 @@ internal sealed class Server : IDisposable
 
         _httpClient?.Dispose();
 
-        Console.WriteLine(nameof(MinimalProxy) + " is down.\n");
+        Console.WriteLine($"\n{nameof(MinimalProxy)} is down.\n");
     }
 
 
