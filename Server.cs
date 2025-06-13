@@ -231,7 +231,7 @@ internal sealed class Server : IDisposable
     {
         var sb = new StringBuilder();
 
-        string secTimeoutStr = _httpClient.Timeout == Timeout.InfiniteTimeSpan ? "Infinite" : _httpClient.Timeout.Seconds.ToString() + "s";
+        string secTimeoutStr = _httpClient.Timeout == Timeout.InfiniteTimeSpan ? "Infinite" : _httpClient.Timeout.TotalSeconds.ToString() + "s";
 
         sb.
             AppendLine("Configuration:").
