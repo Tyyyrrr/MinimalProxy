@@ -4,17 +4,18 @@ namespace MinimalProxy
 {
     class Program
     {
-        
         static void Main(string[] args)
         {
-            Server server;
-
             try
             {
-                server = new Server(args);
+                using var server = new Server(args);
+
+                Console.Read();
             }
             catch(Exception ex)
             {
+                Environment.ExitCode = 1;
+
                 string str = $"Failed to setup {nameof(MinimalProxy)}: " + ex.Message;
 
                 while (ex.InnerException != null)
@@ -29,11 +30,6 @@ namespace MinimalProxy
                 Console.Read();
                 return;
             }
-
-
-            Console.Read();
-
-            server.Dispose();
         }
     }
 }
