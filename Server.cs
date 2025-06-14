@@ -317,16 +317,27 @@ internal sealed class Server : IDisposable
 
     async Task HandleClientWithTranslationAsync(HttpListenerContext context)
     {
-        if(!_translator.TryTranslateRequest(context.Request, out var translatedRequest))
+        HttpRequestMessage translatedRequest;
+        try
+        {
+            if (!_translator.TryTranslateRequest(context.Request, out translatedRequest))
+            {
+#if DEBUG
+                Console.WriteLine("Failed to translate request.");
+#endif
+                return;
+            }
+        }
+        catch(Exception ex)
         {
 #if DEBUG
-            Console.WriteLine("Failed to translate request.");
+            if(!ShouldTerminate())
+                Console.WriteLine("Failed to translate request: " + ex.ToString());
 #endif
             return;
         }
 
         HttpResponseMessage response;
-
         try
         {
             response = await GetResponseAsync(translatedRequest);
@@ -344,16 +355,26 @@ internal sealed class Server : IDisposable
             translatedRequest.Dispose();
         }
 
-
-        if(!_translator.TryTranslateResponse(response, out var translatedResponse))
+        HttpResponseMessage translatedResponse;
+        try
+        {
+            if (!_translator.TryTranslateResponse(response, out translatedResponse))
+            {
+#if DEBUG
+                Console.WriteLine("Failed to translate response.");
+#endif
+                response.Dispose();
+                return;
+            }
+        }
+        catch(Exception ex)
         {
 #if DEBUG
-            Console.WriteLine("Failed to translate response.");
+            if (!ShouldTerminate())
+                Console.WriteLine("Failed to translate response: " + ex.Message);
 #endif
-            response.Dispose();
             return;
         }
-
 
         try
         {
