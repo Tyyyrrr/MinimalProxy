@@ -2,12 +2,12 @@
 
 namespace TranslationInterface
 {
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
     public static class TranslatorImplementationProvider
     {
         private static string _lastErrorMessage = "Everything is fine";
 
         public static string GetLastErrorMessage() => _lastErrorMessage;
-
 
         public static bool TryGetTranslatorInstance(Assembly assembly, ref ITranslator instance)
         {
@@ -19,7 +19,7 @@ namespace TranslationInterface
                 return false;
             }
 
-            object? inst;
+            object inst;
             try
             {
                 inst = Activator.CreateInstance(type);
@@ -43,4 +43,5 @@ namespace TranslationInterface
 
 
     }
+#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
 }
