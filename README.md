@@ -66,7 +66,7 @@ Timeout: 20s
 
 >Press ENTER key to terminate
 
-
+### ***Switch to '[example](https://github.com/Tyyyrrr/MinimalProxy/blob/example/TranslationExample/README.md)' branch to see an example of custom translation.***
 
 ## Author
 
