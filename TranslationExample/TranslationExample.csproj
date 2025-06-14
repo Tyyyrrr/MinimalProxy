@@ -10,4 +10,10 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="prompt_template.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
