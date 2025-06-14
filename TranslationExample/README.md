@@ -45,7 +45,7 @@ dotnet build
 ### 3. Run proxy with args
 ```sh
 cd ~path/to/your/directory/MinimalProxy
-dotnet run -- -host 127.0.0.1 -port 8443 -url http://127.0.0.1:11434 -timeout 60 -lib TranslationExample/bin/Debug/net9.0/TranslationExample.dll
+dotnet run -- -host 127.0.0.1 -port 8443 -url http://127.0.0.1:11434/api/generate -timeout 60 -lib TranslationExample/bin/Debug/net9.0/TranslationExample.dll
 ```
 
 >If successful, your console log should now look like this:
@@ -91,7 +91,7 @@ Let me know what you're thinking!
 >Alternatively, you can run proxy without specifying the dll to see what the non-translated response would look like.
 
 ```sh
-dotnet run -- -host 127.0.0.1 -port 8443 -url http://127.0.0.1:11434 -timeout 60
+dotnet run -- -host 127.0.0.1 -port 8443 -url http://127.0.0.1:11434/api/generate -timeout 60
 ```
 
 >However, without translation you will also need to modify the curl command
