@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <Reference Include="TranslationInterface">
-      <HintPath>..\bin\Debug\net9.0\TranslationInterface.dll</HintPath> <!--you may need to alter this path depending on the location of TranslationInterface.dll library-->
+      <HintPath>..\TranslationInterface\bin\Debug\net9.0\TranslationInterface.dll</HintPath> <!--you may need to alter this path depending on the location of TranslationInterface.dll library-->
     </Reference>
   </ItemGroup>
 
