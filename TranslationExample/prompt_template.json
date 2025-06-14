@@ -1,0 +1,5 @@
+﻿{
+  "model": "gemma3",
+  "prompt": "<USER_PROMPT>",
+  "stream": false
+}
