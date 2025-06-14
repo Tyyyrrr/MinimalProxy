@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -18,7 +19,18 @@ public class Translator : ITranslator
     static readonly string _jsonTemplate;
     static Translator()
     {
-        _jsonTemplate = File.ReadAllText(_templateFileName);
+        var dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        var path = Path.Combine(dir, _templateFileName);
+
+        try
+        {
+            _jsonTemplate = File.ReadAllText(path);
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine($"Failed to retrieve json template from file at path: {path}\nException: {ex.GetType().ToString()}  -  {ex.Message}");
+            throw;
+        }
     }
 
     public bool TryTranslateRequest(HttpListenerRequest originalRequest, out HttpRequestMessage translatedRequest)
