@@ -249,7 +249,7 @@ internal sealed class Server : IDisposable
 #endif
 
 
-    bool ShouldTranslate() => _dllPath.Length > 0;
+    bool ShouldTranslate() => _dllPath != string.Empty;
 
     bool ShouldTerminate() => _cts.IsCancellationRequested;
 
